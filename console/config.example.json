@@ -1,0 +1,25 @@
+{
+  "port": 3900,
+  "autoStart": false,
+  "autoStartDsh": false,
+  "dsh": {
+    "exe": "C:\\path\\to\\DeepSeek Harness.exe",
+    "baseUrl": ""
+  },
+  "snowluma": {
+    "dir": "C:\\path\\to\\SnowLuma"
+  },
+  "qqbridge": {
+    "dir": "qq-bridge"
+  },
+  "mumu": {
+    "manager": "C:\\path\\to\\MuMuManager.exe",
+    "adb": "C:\\path\\to\\adb.exe",
+    "instance": 0,
+    "serial": "127.0.0.1:16384",
+    "autoStart": false
+  },
+  "bili": {
+    "enabled": false
+  }
+}

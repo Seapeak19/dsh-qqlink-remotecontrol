@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>小鲸鱼控制台</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo"><img src="/logo.svg" alt="小鲸鱼" /></div>
+        <div>
+          <div class="brand-title">小鲸鱼</div>
+          <div class="brand-sub">AI 陪伴控制台</div>
+        </div>
+      </div>
+      <nav>
+        <button class="nav active" data-view="overview"><span>▦</span> 总览</button>
+        <button class="nav" data-view="settings"><span>⚙</span> 设置</button>
+        <button class="nav" data-view="roles"><span>✎</span> 人格</button>
+        <button class="nav" data-view="memory"><span>❖</span> 记忆</button>
+        <button class="nav" data-view="logs"><span>≡</span> 日志</button>
+        <button class="nav" data-view="apps"><span>▤</span> 软件</button>
+        <button class="nav" data-view="files"><span>▧</span> 文件</button>
+        <button class="nav" data-view="about"><span>ⓘ</span> 关于</button>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="conn-dot" class="dot"></span>
+        <span id="conn-text">连接中…</span>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">总览</h1>
+          <div class="sub" id="page-sub">正在读取状态…</div>
+        </div>
+        <div class="top-actions">
+          <span id="status-pill" class="pill">…</span>
+          <button id="btn-start" class="btn primary">启动全部</button>
+          <button id="btn-stop" class="btn ghost">停止</button>
+          <button id="btn-restart" class="btn ghost">重启桥接</button>
+        </div>
+      </header>
+
+      <section id="view-overview" class="view">
+        <div id="op-banner" class="banner hidden"></div>
+        <div class="grid" id="cards"></div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>最近活动</h2>
+            <span class="muted" id="activity-time"></span>
+          </div>
+          <div id="activity" class="activity">—</div>
+        </div>
+
+        <div id="legacy-box" class="banner warn hidden"></div>
+
+        <div class="panel tips">
+          <div class="panel-head"><h2>使用顺序</h2></div>
+          <ol>
+            <li>打开本控制台（或开机自启）→ 自动拉起 DSH、SnowLuma、qq-bridge。</li>
+            <li>手动登录 QQ 小号；SnowLuma 会自动接管，OneBot 的 3000 / 3001 随之上线。</li>
+            <li>在 QQ 里给机器人发消息；qq-bridge 通过 DSH 生成回复。</li>
+            <li>改完设置后，涉及 <code>config.json</code> 的项需要「重启桥接」才生效；人格和模式是即时生效的。</li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="view-settings" class="view hidden">
+        <form id="settings-form" class="settings">
+          <div class="panel">
+            <div class="panel-head"><h2>运行环境</h2><span class="muted">路径与启动方式</span></div>
+            <div class="form-grid">
+              <label>DSH 程序路径
+                <input id="set-dsh-exe" type="text" spellcheck="false" />
+              </label>
+              <label>DSH API 地址
+                <input id="set-dsh-url" type="text" spellcheck="false" placeholder="留空则每次自动发现" />
+              </label>
+              <label>SnowLuma 目录
+                <input id="set-snow-dir" type="text" spellcheck="false" />
+              </label>
+              <label>qq-bridge 目录
+                <input id="set-bridge-dir" type="text" spellcheck="false" />
+              </label>
+            </div>
+            <div class="checks">
+              <label class="check"><input id="set-auto-start" type="checkbox" /> 打开控制台时自动启动全部</label>
+              <label class="check"><input id="set-auto-dsh" type="checkbox" /> DSH 没开时自动启动它</label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>QQ 与白名单</h2><span class="muted">fail-closed：白名单为空时默认不响应</span></div>
+            <div class="form-grid">
+              <label>主人 QQ（ownerQQ）
+                <input id="set-owner" type="text" inputmode="numeric" spellcheck="false" />
+              </label>
+              <label>允许的私聊（逗号分隔）
+                <input id="set-allow-private" type="text" spellcheck="false" />
+              </label>
+              <label>允许的群（逗号分隔）
+                <input id="set-allow-groups" type="text" spellcheck="false" />
+              </label>
+              <label class="check inline"><input id="set-allow-all" type="checkbox" /> 白名单为空时放行全部（不建议）</label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>模型与模式</h2><span class="muted">改模型需要重启桥接</span></div>
+            <div class="form-grid">
+              <label>DSH 模型
+                <input id="set-model" type="text" spellcheck="false" placeholder="deepseek-flash" />
+              </label>
+              <label>思考强度
+                <select id="set-effort">
+                  <option value="max">max</option>
+                  <option value="high">high</option>
+                  <option value="low">low</option>
+                </select>
+              </label>
+              <label>聊天 preset
+                <input id="set-preset" type="text" spellcheck="false" />
+              </label>
+              <label>二代仿真 preset
+                <input id="set-preset-v2" type="text" spellcheck="false" />
+              </label>
+              <label>运行模式
+                <select id="set-mode">
+                  <option value="reserved2">reserved2 · 二代仿真（推荐）</option>
+                  <option value="reserved">reserved · 一代仿真</option>
+                  <option value="chat">chat · 白名单安全聊天</option>
+                  <option value="closed-agent">closed-agent · 仅主人私聊</option>
+                </select>
+              </label>
+              <label>人格注入上限（字符）
+                <input id="set-role-limit" type="number" min="1000" max="20000" step="500" />
+              </label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>节奏与风控</h2><span class="muted">别为了快把频率调高</span></div>
+            <div class="form-grid">
+              <label>发送间隔（毫秒）
+                <input id="set-send-delay" type="number" min="0" step="100" />
+              </label>
+              <label>每分钟最多发送
+                <input id="set-max-min" type="number" min="1" max="60" />
+              </label>
+              <label>每小时最多发送
+                <input id="set-max-hour" type="number" min="1" max="600" />
+              </label>
+              <label>单条最大字数
+                <input id="set-max-chars" type="number" min="50" max="2000" />
+              </label>
+              <label>回复最大字数
+                <input id="set-reply-chars" type="number" min="50" max="2000" />
+              </label>
+              <label class="check inline"><input id="set-proactive" type="checkbox" /> 允许她主动找你</label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>模拟器</h2><span class="muted">MuMu Player 12 · adb</span></div>
+            <div class="form-grid">
+              <label>MuMuManager 路径
+                <input id="set-mumu-manager" type="text" spellcheck="false" />
+              </label>
+              <label>adb 路径
+                <input id="set-mumu-adb" type="text" spellcheck="false" />
+              </label>
+              <label>实例编号
+                <input id="set-mumu-instance" type="number" min="0" step="1" />
+              </label>
+              <label>设备序列号
+                <input id="set-mumu-serial" type="text" spellcheck="false" />
+              </label>
+            </div>
+            <div class="checks">
+              <label class="check"><input id="set-mumu-auto" type="checkbox" /> 启动全部时自动启动模拟器并连接 adb</label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>控制台</h2><span class="muted">只监听 127.0.0.1</span></div>
+            <div class="form-grid">
+              <label>端口
+                <input id="set-port" type="text" disabled />
+              </label>
+              <label>桥接控制台令牌
+                <span class="row">
+                  <input id="set-console-token" type="text" spellcheck="false" />
+                  <button type="button" id="btn-rotate-token" class="btn tiny ghost">重新生成</button>
+                </span>
+              </label>
+            </div>
+            <div class="checks">
+              <label class="check"><input id="set-autostart" type="checkbox" /> 开机自启（登录 Windows 后自动打开控制台）</label>
+            </div>
+          </div>
+
+          <div class="save-row">
+            <button type="submit" class="btn primary">保存设置</button>
+            <span id="save-hint" class="muted"></span>
+          </div>
+        </form>
+      </section>
+
+      <section id="view-roles" class="view hidden">
+        <div class="roles">
+          <div class="panel role-list">
+            <div class="panel-head"><h2>人格</h2><button id="btn-new-role" class="btn tiny">新建</button></div>
+            <div id="role-list" class="role-list-body"></div>
+          </div>
+          <div class="panel role-editor">
+            <div class="panel-head">
+              <h2 id="role-editor-title">选择一个人格</h2>
+              <span id="role-current-badge" class="badge hidden">当前启用</span>
+            </div>
+            <label class="role-name">名称
+              <input id="role-name" type="text" spellcheck="false" />
+            </label>
+            <textarea id="role-content" spellcheck="false" placeholder="人格卡只写「你是谁 / 怎么说话 / 脾气 / 边界」，不要写工具用法。"></textarea>
+            <div class="role-actions">
+              <button id="btn-save-role" class="btn primary">保存</button>
+              <button id="btn-activate-role" class="btn">设为当前人格</button>
+              <button id="btn-delete-role" class="btn danger">删除</button>
+              <span id="role-hint" class="muted"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-logs" class="view hidden">
+        <div class="panel logs">
+          <div class="panel-head">
+            <div class="log-tabs">
+              <button class="tab active" data-source="bridge">qq-bridge</button>
+              <button class="tab" data-source="snowluma">SnowLuma</button>
+              <button class="tab" data-source="console">控制台</button>
+            </div>
+            <span class="muted" id="log-file"></span>
+          </div>
+          <pre id="log-text">加载中…</pre>
+        </div>
+      </section>
+
+      <section id="view-memory" class="view hidden">
+        <div class="grid" id="memory-cards"></div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>加一条记忆</h2><span class="muted">写进 memory.json，并自动同步到人格末尾</span></div>
+          <div class="form-grid">
+            <label>分类
+              <select id="mem-category">
+                <option value="facts">事实</option>
+                <option value="preferences">偏好</option>
+                <option value="feedback">反馈</option>
+                <option value="promises">承诺/提醒</option>
+                <option value="relations">关系</option>
+                <option value="events">事件</option>
+              </select>
+            </label>
+            <label>内容
+              <input id="mem-text" type="text" placeholder="例如：不喜欢电影解说" />
+            </label>
+            <label>对象（可选）
+              <input id="mem-target" type="text" placeholder="例如：用户" />
+            </label>
+            <label>时间（可选，承诺用）
+              <input id="mem-due" type="text" placeholder="2026-10-22 12:00" />
+            </label>
+          </div>
+          <div class="phone-actions">
+            <button id="btn-mem-add" class="btn primary">添加</button>
+            <button id="btn-mem-distill" class="btn">从最近聊天提炼</button>
+            <button id="btn-mem-refresh" class="btn ghost">刷新</button>
+            <a id="btn-mem-export" class="btn ghost" href="/api/memory/export" download="memory.json">导出 JSON</a>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>记忆列表</h2><span class="muted" id="mem-hint"></span></div>
+          <div id="memory-list" class="memory-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>导入</h2><span class="muted">粘贴 memory.json，合并导入</span></div>
+          <textarea id="mem-import" class="mem-import" placeholder='{"facts":[{"text":"..."}]}'></textarea>
+          <div class="phone-actions">
+            <button id="btn-mem-import" class="btn">导入合并</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-apps" class="view hidden">
+        <div class="grid" id="app-cards"></div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>添加授权软件</h2><span class="muted">只允许控制这里列出的应用</span></div>
+          <div class="form-grid">
+            <label>从运行中的窗口选择
+              <select id="app-running"><option value="">（刷新后选择）</option></select>
+            </label>
+            <label>显示名
+              <input id="app-name" type="text" placeholder="记事本" />
+            </label>
+            <label>进程名
+              <input id="app-process" type="text" placeholder="notepad" />
+            </label>
+            <label>exe 路径
+              <input id="app-exe" type="text" placeholder="C:\Windows\System32\notepad.exe" />
+            </label>
+            <label>窗口标题正则（可选）
+              <input id="app-title" type="text" placeholder="记事本" />
+            </label>
+          </div>
+          <div class="phone-actions" style="margin-top:10px">
+            <select id="app-installed" style="flex:1;min-width:260px"><option value="">（扫描已安装软件后选择）</option></select>
+            <button id="btn-app-scan" class="btn">扫描已安装</button>
+            <button id="btn-app-pick" class="btn ghost">浏览 exe…</button>
+          </div>
+          <div class="checks" id="app-actions">
+            <label class="check"><input type="checkbox" value="launch" checked /> 启动</label>
+            <label class="check"><input type="checkbox" value="windows" checked /> 列窗口</label>
+            <label class="check"><input type="checkbox" value="focus" checked /> 聚焦</label>
+            <label class="check"><input type="checkbox" value="snapshot" checked /> 截图</label>
+            <label class="check"><input type="checkbox" value="click" checked /> 点击</label>
+            <label class="check"><input type="checkbox" value="type" checked /> 输入</label>
+            <label class="check"><input type="checkbox" value="key" checked /> 按键</label>
+            <label class="check"><input type="checkbox" value="scroll" checked /> 滚轮</label>
+          </div>
+          <div class="phone-actions">
+            <button id="btn-app-add" class="btn primary">添加授权</button>
+            <button id="btn-app-refresh" class="btn ghost">刷新</button>
+          </div>
+          <p class="muted">⚠️ 只授权你信任的软件；不要授权支付/银行/密码管理器/命令行。授权后，QQ 主人私聊可以让小鲸鱼操作它。</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>已授权软件</h2><span class="muted" id="app-hint"></span></div>
+          <div id="app-list" class="app-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>应用画面</h2><span class="muted" id="app-shot-hint">点「截图」看当前窗口</span></div>
+          <div class="phone-stage"><img id="app-shot" alt="应用截图" /></div>
+        </div>
+
+        <div class="section-label">模拟器 · MuMu</div>
+        <div class="grid" id="phone-cards"></div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>模拟器画面</h2>
+            <span class="muted" id="phone-shot-hint">点「截图」读取当前画面</span>
+          </div>
+          <div class="phone-stage">
+            <img id="phone-shot" alt="模拟器截图" />
+          </div>
+          <div class="phone-actions">
+            <button id="btn-phone-start" class="btn primary">启动模拟器</button>
+            <button id="btn-phone-connect" class="btn">连接 adb</button>
+            <button id="btn-phone-shot" class="btn">截图</button>
+            <button id="btn-phone-keyboard" class="btn ghost">安装 ADBKeyboard</button>
+          </div>
+          <p class="muted">B站不再自动刷；需要时让小鲸鱼打开模拟器、登录并手动进 B站。</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>打开 App</h2><span class="muted">列表来自 pm list packages -3</span></div>
+          <div class="phone-apps">
+            <select id="phone-apps"></select>
+            <button id="btn-phone-open" class="btn">打开</button>
+            <button id="btn-phone-refresh" class="btn ghost">刷新列表</button>
+          </div>
+        </div>
+
+        <div class="section-label">实时感知 · 视觉 + 听觉</div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>持续看 / 听</h2>
+            <span class="muted" id="perception-hint">每 1.5 秒抓屏 + 系统声音转文字</span>
+          </div>
+          <div class="phone-actions">
+            <select id="perception-mode">
+              <option value="pc">电脑画面</option>
+              <option value="emulator">模拟器画面</option>
+            </select>
+            <button id="btn-perception-start" class="btn primary">开始看</button>
+            <button id="btn-perception-stop" class="btn">停止</button>
+            <button id="btn-perception-refresh" class="btn ghost">刷新</button>
+          </div>
+          <div class="perception-stage"><img id="perception-img" alt="实时画面" /></div>
+          <pre id="perception-text" class="file-preview"></pre>
+        </div>
+      </section>
+
+      <section id="view-files" class="view hidden">
+        <div class="grid" id="file-cards"></div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>文件访问</h2><span class="muted">按路径访问 · 常用文件夹只是快捷入口</span></div>
+          <p class="muted" id="file-mode">加载中…</p>
+          <div id="file-roots" class="file-roots"></div>
+          <div class="phone-actions">
+            <input id="file-root-input" type="text" placeholder="添加常用文件夹，例如 %USERPROFILE%\Desktop" style="flex:1;min-width:320px" />
+            <button id="btn-file-pick-folder" class="btn ghost">浏览文件夹…</button>
+            <button id="btn-file-add-root" class="btn primary">添加</button>
+          </div>
+          <p class="muted">⚠️ 默认受限模式；如需按任意路径读写，在 <code>console/data/files.json</code> 里显式设置 <code>"unrestricted": true</code>。系统目录禁止写入，.ssh/凭据/浏览器数据禁止访问，修改前自动 .bak 备份。</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>文件</h2><span class="muted" id="file-hint">点目录进入，点文件预览</span></div>
+          <div class="phone-actions">
+            <input id="file-open-path" type="text" placeholder="直接输入文件/文件夹路径，例如 %USERPROFILE%\Desktop\xxx.docx" style="flex:1;min-width:320px" />
+            <button id="btn-file-open-path" class="btn">打开</button>
+          </div>
+          <div class="phone-actions">
+            <button id="btn-file-up" class="btn tiny ghost">上一级</button>
+            <button id="btn-file-refresh" class="btn tiny ghost">刷新</button>
+            <span id="file-path" class="muted" style="word-break:break-all"></span>
+          </div>
+          <div id="file-list" class="file-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>预览 / 发送</h2><span class="muted" id="file-send-hint">选中文件后可发送到 QQ</span></div>
+          <div class="phone-actions">
+            <button id="btn-file-send" class="btn primary">发送到 QQ</button>
+          </div>
+          <pre id="file-preview" class="file-preview"></pre>
+        </div>
+      </section>
+
+      <section id="view-about" class="view hidden">
+        <div class="panel about">
+          <h2>小鲸鱼控制台 <span class="badge">v1.0.0</span></h2>
+          <p>把 DSH、SnowLuma、qq-bridge 串起来的一层本地控制台。打开它就会按顺序拉起所有程序，并提供状态、启停、设置、人格和日志。</p>
+          <table class="kv">
+            <tr><th>控制台</th><td>http://127.0.0.1:3900</td></tr>
+            <tr><th>qq-bridge 控制台</th><td><a href="#" id="link-bridge">打开（带令牌）</a></td></tr>
+            <tr><th>SnowLuma WebUI</th><td><a href="http://127.0.0.1:5099" target="_blank" rel="noreferrer">http://127.0.0.1:5099</a></td></tr>
+            <tr><th>数据目录</th><td><code>qq-bridge/state</code> · <code>qq-bridge/roles</code></td></tr>
+            <tr><th>日志目录</th><td><code>console/logs</code> · <code>SnowLuma/logs</code></td></tr>
+          </table>
+          <p class="muted">qq-bridge 是第三方项目（Derpyu520/qq-bridge），SnowLuma 使用源码可见非商业许可；仅供个人学习与非商业自托管使用。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

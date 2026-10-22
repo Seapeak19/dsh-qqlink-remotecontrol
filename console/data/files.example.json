@@ -1,0 +1,5 @@
+{
+  "unrestricted": false,
+  "roots": [],
+  "allowExtensions": [".txt", ".md", ".csv", ".json", ".docx", ".xlsx", ".pdf"]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "ai-companion-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows-first AI companion kit: QQ bridge, desktop/emulator/file/perception MCP tools, local console",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "console": "node console/server.js",
+    "bridge": "node qq-bridge/src/bridge.js",
+    "demo": "node packages/companion/examples/demo.js",
+    "check": "node scripts/check.mjs",
+    "phone": "node packages/phone-mcp/src/phone-mcp.js",
+    "phone:test": "node packages/phone-mcp/src/phone-mcp.js --selftest"
+  },
+  "keywords": [
+    "ai",
+    "companion",
+    "chatbot",
+    "mcp",
+    "model-context-protocol",
+    "android",
+    "adb",
+    "automation",
+    "onebot",
+    "qq",
+    "memory",
+    "persona"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

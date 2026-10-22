@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+
+# local config / secrets (copy from *.example.json)
+.env
+.env.*
+!.env.example
+console/config.json
+qq-bridge/config.json
+
+# runtime data
+console/logs/
+console/data/*
+!console/data/*.example.json
+!console/data/README.md
+console/pylibs/
+console/__pycache__/
+console/personas/*
+!console/personas/*.example.md
+shared/
+qq-bridge/state/
+qq-bridge/logs/
+qq-bridge/roles/*
+!qq-bridge/roles/README.md
+!qq-bridge/roles/*.example.md
+
+# screenshots / personal captures
+ui-*.png
+screenshots/
+*.log
+*.bak
+*.bak-*
+*.tmp
+*.pyc
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# large media
+assets/video/
+*.mp4
+*.wav
+*.mov
+*.mkv
+
