@@ -83,7 +83,8 @@ function overall() {
   const br = s.bridge.running && s.bridge.dshReady;
   if (dsh && sl && br && ob && qq) return { cls: 'ok', text: '运行中' };
   if (dsh && sl && br && !ob) return { cls: 'warn', text: '等待 QQ 登录' };
-  if (dsh && sl && !br) return { cls: 'warn', text: '桥接未运行' };
+  if (dsh && sl && !s.bridge.running) return { cls: 'warn', text: '桥接未运行' };
+  if (dsh && sl && s.bridge.running && !br) return { cls: 'warn', text: '桥接未就绪' };
   if (!dsh) return { cls: 'bad', text: 'DSH 未运行' };
   return { cls: 'warn', text: '未完全就绪' };
 }
