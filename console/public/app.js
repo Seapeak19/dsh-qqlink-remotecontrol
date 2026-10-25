@@ -75,7 +75,7 @@ $$('.nav').forEach((b) => b.addEventListener('click', () => switchView(b.dataset
 function overall() {
   const s = state.status;
   if (!s) return { cls: 'warn', text: '连接中…' };
-  if (s.op && !s.op.finishedAt) return { cls: 'warn', text: s.op.step || '处理中…' };
+  if (s.op && s.op.name && !s.op.finishedAt) return { cls: 'warn', text: s.op.step || '处理中…' };
   const dsh = s.dsh.running && s.dsh.baseUrl;
   const sl = s.snowluma.running;
   const qq = s.snowluma.online;
@@ -111,7 +111,7 @@ function render() {
   $('#conn-dot').className = 'dot on';
   $('#conn-text').textContent = '控制台已连接';
 
-  const opRunning = !!(s.op && !s.op.finishedAt);
+  const opRunning = !!(s.op && s.op.name && !s.op.finishedAt);
   $('#btn-start').disabled = opRunning;
   $('#btn-stop').disabled = opRunning;
   $('#btn-restart').disabled = opRunning;
@@ -191,22 +191,7 @@ function render() {
 
   $('#cards').innerHTML = cards.join('');
 
-  const em = s.emulator || {};
-  $('#cards').insertAdjacentHTML('beforeend', cardHtml({
-    title: '模拟器 · MuMu',
-    ok: em.running ? (em.androidStarted ? true : null) : false,
-    stateText: !em.running ? '未启动' : em.androidStarted ? '运行中' : '启动中',
-    body: `
-      <div>实例 <b>${esc(em.name || '—')}</b> · Android <b>${em.androidStarted ? '就绪' : '未就绪'}</b></div>
-      <div>adb <b>${esc(em.serial || '—')}</b>${em.adbPort ? ' · 端口 ' + esc(em.adbPort) : ''}</div>
-      <div class="muted">启动全部时会自动拉起并连接；她也能用 phone 工具。</div>`,
-    actions: `<button class="btn tiny ghost" data-act="open-phone">打开模拟器页</button>`,
-  }));
-
-  // 活动
-  const act = br.activity || '';
-  $('#activity').textContent = act || '暂无活动记录。发一条 QQ 消息后，这里会显示桥接的处理过程。';
-  $('#activity-time').textContent = act ? '来自 qq-bridge /api/status' : '';
+  // 总览保持简洁：不显示模拟器，也不显示桥接活动流水
 
   // 旧 companion 警告
   const legacy = s.legacy || [];
@@ -279,14 +264,22 @@ document.addEventListener('click', async (e) => {
       await post('/api/restart'); toast('正在重启 qq-bridge…'); refreshStatus();
     } else if (act === 'stop-legacy') {
       await post('/api/stop/legacy'); toast('已停止旧 companion'); refreshStatus();
-    } else if (act === 'open-phone') {
-      switchView('phone');
     } else if (act === 'phone-start') {
       await post('/api/phone/start'); toast('正在启动模拟器…'); setTimeout(loadPhone, 4000);
     } else if (act === 'phone-connect') {
       const j = await post('/api/phone/connect'); toast(j.output || (j.ok ? '已连接' : '连接失败')); loadPhone();
     } else if (act === 'phone-keyboard') {
       const j = await post('/api/phone/keyboard'); toast(j.output || '已安装'); loadPhone();
+    } else if (act === 'mem-distill') {
+      toast('正在提炼最近聊天…');
+      const j = await post('/api/memory/distill');
+      toast(`新增 ${(j.added || []).length} 条`);
+      loadMemoryPage();
+    } else if (act === 'mem-auto-toggle') {
+      const on = btn.dataset.on !== '1';
+      await post('/api/memory/auto', { enabled: on });
+      toast(on ? '自动记忆已开启' : '自动记忆已暂停');
+      loadMemoryPage();
     } else if (act === 'mem-del') {
       await post('/api/memory/remove', { id: btn.dataset.id });
       toast('已删除');
@@ -653,6 +646,7 @@ $('#btn-phone-open').addEventListener('click', async () => {
 
 // ── 记忆 ────────────────────────────────────────────────────
 const MEM_LABEL = { facts: '事实', preferences: '偏好', promises: '承诺/提醒', relations: '关系', feedback: '反馈', events: '事件' };
+const SRC_LABEL = { auto: '自动', distill: '手动提炼', console: '手动添加', import: '导入' };
 
 async function loadMemoryPage() {
   try {
@@ -666,7 +660,24 @@ async function loadMemoryPage() {
 function renderMemoryPage(j) {
   const m = j?.memory || {};
   const c = j?.counts || {};
+  const a = j?.auto || {};
+  const lastRun = a.lastRunAt
+    ? new Date(a.lastRunAt).toLocaleString('zh-CN', { hour12: false })
+    : '还没跑过';
+  const on = !!a.enabled;
   const cards = [
+    cardHtml({
+      title: '自动记忆',
+      ok: on ? (a.lastError ? null : true) : false,
+      stateText: on ? (a.busy ? '提炼中…' : a.lastError ? '上次失败' : '运行中') : '已暂停',
+      body: `
+        <div>上次提炼 <b>${esc(lastRun)}</b> · 累计自动记下 <b>${a.totalAdded || 0}</b> 条</div>
+        <div class="muted">有新聊天（≥${a.minNewMessages || 6} 条）且安静 ${a.quietSec || 90} 秒后自动提炼，最多每 ${a.everyMin || 15} 分钟一次</div>
+        ${a.lastError ? `<div class="bad">${esc(a.lastError)}</div>` : ''}`,
+      actions: `
+        <button class="btn tiny ${on ? 'ghost' : 'primary'}" data-act="mem-auto-toggle" data-on="${on ? 1 : 0}">${on ? '暂停' : '开启'}</button>
+        <button class="btn tiny ghost" data-act="mem-distill">立即提炼</button>`,
+    }),
     cardHtml({
       title: '长期记忆',
       ok: (c.total || 0) > 0,
@@ -695,14 +706,14 @@ function renderMemoryPage(j) {
     parts.push(`<div class="memory-group"><h3>${MEM_LABEL[cat]}（${list.length}）</h3>${list.map((e) => `
       <div class="memory-item">
         <div class="txt">${esc(e.text)}${e.target ? ` <span class="muted">（${esc(e.target)}）</span>` : ''}${e.dueAt ? ` <span class="muted">· ${esc(e.dueAt)}</span>` : ''}${e.done ? ' <span class="muted">· 已完成</span>' : ''}
-          <div class="meta">${esc(e.source || '')}${e.at ? ' · ' + new Date(e.at).toLocaleString('zh-CN', { hour12: false }) : ''}</div>
+          <div class="meta">${esc(SRC_LABEL[e.source] || e.source || '')}${e.at ? ' · ' + new Date(e.at).toLocaleString('zh-CN', { hour12: false }) : ''}</div>
         </div>
         <button class="btn tiny ghost" data-act="mem-del" data-id="${esc(e.id)}">删</button>
       </div>`).join('')}</div>`);
   }
   $('#memory-list').innerHTML = parts.length
     ? parts.join('')
-    : '<p class="muted">还没有长期记忆。可以点「从最近聊天提炼」。</p>';
+    : '<p class="muted">还没有长期记忆。等自动记忆跑一次，或手动加一条。</p>';
 }
 
 $('#btn-mem-add').addEventListener('click', async () => {
@@ -719,14 +730,6 @@ $('#btn-mem-add').addEventListener('click', async () => {
     $('#mem-text').value = '';
     $('#mem-target').value = '';
     $('#mem-due').value = '';
-    loadMemoryPage();
-  } catch (e) { toast(e.message, 'error'); }
-});
-$('#btn-mem-distill').addEventListener('click', async () => {
-  toast('正在从最近聊天提炼…');
-  try {
-    const j = await post('/api/memory/distill');
-    toast(`新增 ${(j.added || []).length} 条`);
     loadMemoryPage();
   } catch (e) { toast(e.message, 'error'); }
 });

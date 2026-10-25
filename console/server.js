@@ -50,6 +50,15 @@ const DEFAULTS = {
     lastRunDay: '',
     lastRun: '',
   },
+  // 自动记忆：有新的私聊就自动提炼进长期记忆；需要 companion 里配置 apiKey
+  // 公开版默认关闭，打开「记忆」页的开关（或把 auto 改成 true）即可
+  memory: {
+    auto: false,
+    everyMin: 15,
+    minNewMessages: 6,
+    quietSec: 90,
+    maxEntriesPerRun: 6,
+  },
 };
 
 function deepMerge(base, extra) {
@@ -141,15 +150,26 @@ async function mumuConnect() {
   return r;
 }
 
+function adbDeviceReady(out) {
+  return String(out || '')
+    .split(/\r?\n/)
+    .some((l) => {
+      const p = l.trim().split(/\s+/);
+      return p[0] === cfg.mumu.serial && p[1] === 'device';
+    });
+}
+
 async function mumuStart() {
   const r = await runFile(cfg.mumu.manager, ['control', '-v', String(cfg.mumu.instance), 'launch'], { timeout: 120000 });
-  if (!r.ok) throw new Error('MuMu 启动失败：' + (r.stderr || r.err?.message || ''));
+  const res = parseJson(r.stdout, null);
+  if (!r.ok || (res && res.errcode)) {
+    throw new Error('MuMu 启动失败：' + ((res && res.errmsg) || r.stderr || r.err?.message || ''));
+  }
+  // 以 adb 就绪为准：MuMuManager info 的 is_android_started 有时不刷新，光看它会误判超时
   for (let i = 0; i < 60; i++) {
-    const info = await mumuInfo();
-    if (info?.is_android_started) {
-      await mumuConnect();
-      return info;
-    }
+    await mumuConnect();
+    const dev = await runFile(cfg.mumu.adb, ['devices'], { timeout: 15000 });
+    if (adbDeviceReady(dev.stdout)) return mumuInfo();
     await sleep(2000);
   }
   throw new Error('模拟器启动超时（120 秒）');
@@ -402,19 +422,86 @@ const COMPANION_CFG = path.join(ROOT, 'packages', 'companion', 'config.json');
 const SOCIAL_V2 = path.join(bridgeDir(), 'state', 'social-v2.json');
 const PEOPLE_JSON = path.join(ROOT, 'packages', 'companion', 'data', 'people.json');
 
-async function distillMemory() {
+const AUTO_MEMORY_FILE = path.join(__dirname, 'data', 'auto-memory.json');
+let autoMemoryBusy = false;
+let autoMemoryTimer = null;
+
+function loadAutoMemory() {
+  try { return JSON.parse(fs.readFileSync(AUTO_MEMORY_FILE, 'utf8')); }
+  catch { return { lastTs: 0, lastRunAt: null, totalAdded: 0, lastAdded: 0, lastError: '' }; }
+}
+function saveAutoMemory(s) {
+  try {
+    fs.mkdirSync(path.dirname(AUTO_MEMORY_FILE), { recursive: true });
+    fs.writeFileSync(AUTO_MEMORY_FILE, JSON.stringify(s, null, 2), 'utf8');
+  } catch {}
+}
+function memoryAutoInfo() {
+  const st = loadAutoMemory();
+  const m = cfg.memory || {};
+  return {
+    enabled: !!m.auto,
+    everyMin: m.everyMin ?? 15,
+    minNewMessages: m.minNewMessages ?? 6,
+    quietSec: m.quietSec ?? 90,
+    lastRunAt: st.lastRunAt || null,
+    lastTs: Number(st.lastTs || 0),
+    totalAdded: Number(st.totalAdded || 0),
+    lastAdded: Number(st.lastAdded || 0),
+    lastError: st.lastError || '',
+    busy: autoMemoryBusy,
+  };
+}
+
+// 找主人的会话：优先 private:<ownerQQ>，否则挑最近有动静的那个
+function mainConversation() {
+  const social = parseJson(fs.readFileSync(SOCIAL_V2, 'utf8'), null);
+  const convs = social?.conversations || {};
+  const bc = readBridgeConfig();
+  const ownerQQ = String(bc?.ownerQQ || '');
+  const ownerKey = ownerQQ ? `private:${ownerQQ}` : '';
+  if (ownerKey && convs[ownerKey]) return { key: ownerKey, conv: convs[ownerKey], owner: ownerQQ, social };
+  let best = null;
+  for (const [k, v] of Object.entries(convs)) {
+    const msgs = Array.isArray(v?.recentMessages) ? v.recentMessages : [];
+    const t = Math.max(
+      Number(v?.lastActionAt || 0),
+      Number(v?.lastIncomingAt || 0),
+      Number(msgs[msgs.length - 1]?.time || 0),
+    );
+    if (!best || t > best.t) best = { key: k, t, conv: v };
+  }
+  if (!best) return { key: '', conv: {}, owner: ownerQQ, social };
+  return { key: best.key, conv: best.conv, owner: String(best.key).replace(/^private:/, ''), social };
+}
+
+function recentMessagesSince(conv, sinceTs = 0, limit = 60) {
+  const msgs = Array.isArray(conv?.recentMessages) ? conv.recentMessages : [];
+  return msgs.filter((m) => Number(m?.time || 0) > Number(sinceTs || 0)).slice(-limit);
+}
+
+function advanceAutoWatermark(conv) {
+  const newest = Number((Array.isArray(conv?.recentMessages) ? conv.recentMessages : []).slice(-1)[0]?.time || 0);
+  if (!newest) return;
+  const st = loadAutoMemory();
+  if (newest > Number(st.lastTs || 0)) {
+    st.lastTs = newest;
+    saveAutoMemory(st);
+  }
+}
+
+async function distillMemory({ auto = false, messages = null, maxEntries = 15 } = {}) {
   const cfgc = parseJson(fs.readFileSync(COMPANION_CFG, 'utf8'), null);
   if (!cfgc?.apiKey) throw new Error('companion 没有 API key');
-  const bridgeCfg = parseJson(fs.readFileSync(bridgeConfigFile(), 'utf8'), {});
-  const ownerQQ = String(bridgeCfg.ownerQQ || '');
-  const social = parseJson(fs.readFileSync(SOCIAL_V2, 'utf8'), null);
-  const conv = social?.conversations?.[`private:${ownerQQ}`] || {};
-  const recent = (conv.recentMessages || []).slice(-60)
+  const pick = mainConversation();
+  const conv = pick.conv || {};
+  const list = Array.isArray(messages) ? messages : recentMessagesSince(conv, 0, 60);
+  const recent = list
     .map((m) => `${m.isSelf ? '她' : '用户'}: ${String(m.text || '').replace(/\s+/g, ' ').slice(0, 120)}`)
     .filter((s) => s.length > 4)
     .join('\n');
   const people = parseJson(fs.readFileSync(PEOPLE_JSON, 'utf8'), null);
-  const oldTopics = (people?.[ownerQQ]?.topics || []).slice(-30).join('\n');
+  const oldTopics = (people?.[pick.owner]?.topics || []).slice(-30).join('\n');
   const activeTopics = (conv.activeTopics || []).map((t) => t.text).filter(Boolean).join('；');
   const existing = memoryLib.renderSummary();
   const base = String(cfgc.baseUrl || 'https://api.deepseek.com/v1').replace(/\/$/, '');
@@ -422,6 +509,8 @@ async function distillMemory() {
 
 只记稳定、可复用、以后有用的：用户的事实（作息/目标/习惯）、偏好、反馈（喜欢/讨厌什么）、关系、明确约定。
 不要记：一次性的闲聊、天气、密码/账号/隐私、你自己的情绪表演、已经过期的提醒。
+只写用户明确说过的事，不要推断、不要加评价。
+当天的临时状态不要记（今天吃了什么、今天嗓子疼、今晚学到几点），隔几天就不成立。
 每条 text ≤60 字，一条一件事；不要和已有记忆重复。
 
 分类：facts / preferences / promises / relations / feedback
@@ -440,7 +529,7 @@ ${recent || '（无）'}
 更早的聊天摘要：
 ${oldTopics || '（无）'}
 
-输出 JSON（不要代码块），最多 15 条：
+输出 JSON（不要代码块），最多 ${Math.max(1, Number(maxEntries) || 15)} 条：
 {"entries":[{"category":"facts","text":"..."},{"category":"preferences","text":"..."}]}`;
   const r = await fetch(base + '/chat/completions', {
     method: 'POST',
@@ -463,7 +552,59 @@ ${oldTopics || '（无）'}
   const e = txt.lastIndexOf('}');
   if (s >= 0 && e > s) txt = txt.slice(s, e + 1);
   const parsed = JSON.parse(txt);
-  return memoryLib.mergeEntries(parsed?.entries, { source: 'distill' });
+  return memoryLib.mergeEntries(parsed?.entries, { source: auto ? 'auto' : 'distill' });
+}
+
+// 自动记忆：有新聊天 + 安静够久 + 距上次够久，就提炼一次
+async function autoMemoryTick({ force = false } = {}) {
+  if (autoMemoryBusy) return { skipped: 'busy' };
+  const m = cfg.memory || {};
+  if (!force && !m.auto) return { skipped: 'off' };
+  const pick = mainConversation();
+  if (!pick.key || !pick.conv) return { skipped: 'no-conversation' };
+  const st = loadAutoMemory();
+  const msgs = recentMessagesSince(pick.conv, Number(st.lastTs || 0), 40);
+  if (!msgs.length) return { skipped: 'no-new-messages' };
+  const minNew = Math.max(2, Number(m.minNewMessages ?? 6));
+  if (!force && msgs.length < minNew) return { skipped: 'few-messages', pending: msgs.length };
+  const lastTime = Number(msgs[msgs.length - 1]?.time || 0) || Date.now();
+  const quietMs = Math.max(0, Number(m.quietSec ?? 90)) * 1000;
+  if (!force && Date.now() - lastTime < quietMs) return { skipped: 'still-talking' };
+  const everyMs = Math.max(1, Number(m.everyMin ?? 15)) * 60 * 1000;
+  const lastRun = st.lastRunAt ? Date.parse(st.lastRunAt) : 0;
+  if (!force && lastRun && Date.now() - lastRun < everyMs) return { skipped: 'interval' };
+
+  autoMemoryBusy = true;
+  try {
+    const added = await distillMemory({
+      auto: true,
+      messages: msgs,
+      maxEntries: Math.max(1, Number(m.maxEntriesPerRun ?? 6)),
+    });
+    st.lastTs = Math.max(Number(st.lastTs || 0), lastTime);
+    st.lastRunAt = new Date().toISOString();
+    st.lastAdded = added.length;
+    st.totalAdded = Number(st.totalAdded || 0) + added.length;
+    st.lastError = '';
+    saveAutoMemory(st);
+    if (added.length) console.log(`[console] 自动记忆 +${added.length}`);
+    return { ok: true, added: added.length, entries: added };
+  } catch (e) {
+    st.lastRunAt = new Date().toISOString();
+    st.lastError = String(e?.message || e).slice(0, 200);
+    saveAutoMemory(st);
+    console.warn('[console] 自动记忆失败：', st.lastError);
+    return { error: st.lastError };
+  } finally {
+    autoMemoryBusy = false;
+  }
+}
+
+function startAutoMemory() {
+  if (autoMemoryTimer) clearInterval(autoMemoryTimer);
+  autoMemoryTimer = setInterval(() => { void autoMemoryTick(); }, 60 * 1000);
+  autoMemoryTimer.unref?.();
+  setTimeout(() => { void autoMemoryTick(); }, 25000).unref?.();
 }
 
 
@@ -657,7 +798,7 @@ async function bridgeApi(method, pathname, body) {
 }
 
 // ── 操作状态 ──────────────────────────────────────────────────
-let op = { name: null, step: '', startedAt: 0, finishedAt: 0, error: null };
+let op = { name: null, step: '', startedAt: 0, finishedAt: Date.now(), error: null };
 function beginOp(name) {
   if (op.name && !op.finishedAt) return false;
   op = { name, step: '准备中', startedAt: Date.now(), finishedAt: 0, error: null };
@@ -758,14 +899,13 @@ async function restartBridge() {
 
 // ── 状态 ──────────────────────────────────────────────────────
 async function buildStatus() {
-  const [dsh, procs, p5099, p3000, p3001, p3100, mumu] = await Promise.all([
+  const [dsh, procs, p5099, p3000, p3001, p3100] = await Promise.all([
     discoverDsh(),
     listProcesses(),
     portOpen(5099),
     portOpen(3000),
     portOpen(3001),
     portOpen(3100),
-    mumuInfo(),
   ]);
   const cls = classify(procs);
   const sl = readSnowlumaConfig();
@@ -810,13 +950,6 @@ async function buildStatus() {
       paused: bridgeStatus?.socialV2Paused ?? null,
     },
     legacy: cls.legacy.map((p) => ({ pid: p.pid, cmd: p.cmd })),
-    emulator: {
-      running: !!mumu?.is_process_started,
-      androidStarted: !!mumu?.is_android_started,
-      name: mumu?.name || '',
-      adbPort: mumu?.adb_port || null,
-      serial: cfg.mumu.serial,
-    },
     op,
   };
 }
@@ -1206,7 +1339,22 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true, memory, summary: memoryLib.renderSummary(),
         counts: memoryLib.counts(), file: memoryLib.MEMORY_FILE,
+        auto: memoryAutoInfo(),
       });
+    }
+    if (p === '/api/memory/auto' && req.method === 'POST') {
+      const body = await readBody(req);
+      let touched = false;
+      if (body.enabled !== undefined) { cfg.memory = { ...(cfg.memory || {}), auto: !!body.enabled }; touched = true; }
+      if (body.everyMin !== undefined) { cfg.memory = { ...(cfg.memory || {}), everyMin: Math.max(1, Number(body.everyMin) || 15) }; touched = true; }
+      if (body.minNewMessages !== undefined) { cfg.memory = { ...(cfg.memory || {}), minNewMessages: Math.max(2, Number(body.minNewMessages) || 6) }; touched = true; }
+      if (body.quietSec !== undefined) { cfg.memory = { ...(cfg.memory || {}), quietSec: Math.max(0, Number(body.quietSec) || 0) }; touched = true; }
+      if (touched) saveConfig();
+      if (body.run) {
+        const r = await autoMemoryTick({ force: true });
+        return json(res, 200, { ok: true, ...r, auto: memoryAutoInfo() });
+      }
+      return json(res, 200, { ok: true, auto: memoryAutoInfo() });
     }
     if (p === '/api/memory/add' && req.method === 'POST') {
       const body = await readBody(req);
@@ -1232,7 +1380,8 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/memory/distill' && req.method === 'POST') {
       try {
         const added = await distillMemory();
-        return json(res, 200, { ok: true, added, counts: memoryLib.counts() });
+        advanceAutoWatermark(mainConversation().conv);
+        return json(res, 200, { ok: true, added, counts: memoryLib.counts(), auto: memoryAutoInfo() });
       } catch (e) {
         return json(res, 500, { ok: false, error: String(e?.message || e) });
       }
@@ -1499,6 +1648,7 @@ server.listen(cfg.port, '127.0.0.1', () => {
   if (cfg.autoStart) {
     setTimeout(() => { void runOp('autostart', startAll); }, 1500);
   }
+  startAutoMemory();
   // B站自动任务已停用（模拟器里已删除 B站）
 });
 

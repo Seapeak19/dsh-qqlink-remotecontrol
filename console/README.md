@@ -4,13 +4,26 @@
 
 ## 功能
 
-- **总览**：DSH / SnowLuma / OneBot / qq-bridge / MuMu 状态，一键启动/停止/重启。
+- **总览**：只放四张状态卡（DSH / SnowLuma / OneBot / qq-bridge）+ 一行提示，一键启动/停止/重启。
 - **设置**：路径、端口、QQ、模型、节奏、风控、开机自启。
 - **人格**：编辑 `console/personas/*.md` 或 `qq-bridge/roles/*.md`，下一条消息生效。
-- **记忆**：长期记忆（facts / preferences / promises / relations / feedback / events），摘要自动同步进人格。
+- **记忆**：长期记忆（facts / preferences / promises / relations / feedback / events），摘要自动同步进人格；
+  支持**自动记忆**（有新聊天就自动提炼，见下）和手动添加/删除/导入导出。
 - **日志**：qq-bridge / SnowLuma / 控制台日志尾部。
-- **软件**：桌面软件授权、启动/截图/点击/输入；MuMu 模拟器面板；实时感知面板。
+- **软件**：桌面软件授权、启动/截图/点击/输入；MuMu 模拟器面板（默认不随「启动全部」自启）；实时感知面板。
 - **文件**：按路径浏览、预览、发送到 QQ；Word/Excel/PDF 读写。
+
+## 自动记忆
+
+控制台每分钟看一眼主人的私聊（`qq-bridge/state/social-v2.json`），满足下面三条就调一次模型提炼，写进 `data/memory.json`：
+
+- 距上次提炼有新消息 ≥ `minNewMessages`（默认 6 条）
+- 最后一条消息已经安静 ≥ `quietSec`（默认 90 秒），不打断正在聊的天
+- 距上次提炼 ≥ `everyMin`（默认 15 分钟）
+
+水位存在 `data/auto-memory.json`，重复内容会自动去重；条目 `source` 记为 `auto`。
+开关和「立即提炼」在「记忆」页顶部；参数在 `config.json` 的 `memory` 里改。
+需要 `packages/companion/config.json` 里配置 `apiKey`（走 OpenAI 兼容接口），没有 key 时自动记忆会跳过并显示错误。
 
 ## 启动
 
@@ -36,7 +49,7 @@ python -m pip install --target pylibs -r requirements.txt
 
 | 文件 | 服务 |
 | --- | --- |
-| `mcp-phone.cmd` | 模拟器/adb（`PHONE_ADB` / `PHONE_SERIAL` 可覆盖） |
+| `mcp-phone.cmd` | 模拟器/adb（`PHONE_ADB` / `PHONE_SERIAL` / `PHONE_MUMU_MANAGER` 可覆盖） |
 | `mcp-desktop.cmd` | 桌面软件白名单 |
 | `mcp-file.cmd` | 文件/Word/Excel/PDF/QQ 发文件 |
 | `mcp-memory.cmd` | 长期记忆 |

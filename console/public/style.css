@@ -207,19 +207,19 @@ h1 { margin: 0 0 2px; font-size: 23px; letter-spacing: .4px; }
 }
 .panel h2 { margin: 0; font-size: 15px; letter-spacing: .3px; }
 .muted { color: var(--muted); font-size: 12px; }
-.activity {
-  min-height: 44px;
-  color: #c7d8f2;
-  font-size: 13px;
-  background: #0a1424;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
+.overview-note {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.7;
 }
-.tips ol { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
-.tips li { margin: 4px 0; }
+.overview-note code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(148, 190, 230, .14);
+}
 
 .banner {
   border-radius: 11px;
@@ -591,11 +591,7 @@ h1 { font-size: 22px; font-weight: 650; color: #0f2f4c; }
 }
 .panel h2 { color: #12324f; }
 .muted { color: var(--muted); }
-.activity {
-  background: #f7fbff;
-  border-color: var(--line);
-  color: var(--text);
-}
+.overview-note code { background: #eef6fd; }
 .banner {
   background: #f2f9ff;
   border-color: #cfe5f7;

@@ -51,25 +51,9 @@
         <div id="op-banner" class="banner hidden"></div>
         <div class="grid" id="cards"></div>
 
-        <div class="panel">
-          <div class="panel-head">
-            <h2>最近活动</h2>
-            <span class="muted" id="activity-time"></span>
-          </div>
-          <div id="activity" class="activity">—</div>
-        </div>
-
         <div id="legacy-box" class="banner warn hidden"></div>
 
-        <div class="panel tips">
-          <div class="panel-head"><h2>使用顺序</h2></div>
-          <ol>
-            <li>打开本控制台（或开机自启）→ 自动拉起 DSH、SnowLuma、qq-bridge。</li>
-            <li>手动登录 QQ 小号；SnowLuma 会自动接管，OneBot 的 3000 / 3001 随之上线。</li>
-            <li>在 QQ 里给机器人发消息；qq-bridge 通过 DSH 生成回复。</li>
-            <li>改完设置后，涉及 <code>config.json</code> 的项需要「重启桥接」才生效；人格和模式是即时生效的。</li>
-          </ol>
-        </div>
+        <p class="overview-note">打开控制台会自动拉起 DSH、SnowLuma、qq-bridge；改 <code>config.json</code> 后需要「重启桥接」。</p>
       </section>
 
       <section id="view-settings" class="view hidden">
@@ -280,7 +264,6 @@
           </div>
           <div class="phone-actions">
             <button id="btn-mem-add" class="btn primary">添加</button>
-            <button id="btn-mem-distill" class="btn">从最近聊天提炼</button>
             <button id="btn-mem-refresh" class="btn ghost">刷新</button>
             <a id="btn-mem-export" class="btn ghost" href="/api/memory/export" download="memory.json">导出 JSON</a>
           </div>

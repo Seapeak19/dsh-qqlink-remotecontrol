@@ -8,6 +8,8 @@
 // 环境变量（都可选）：
 //   PHONE_ADB         adb 可执行文件路径（默认自动探测 PATH / 常见安装位置）
 //   PHONE_SERIAL      设备序列号（默认选第一个已连接设备）
+//   PHONE_MUMU_MANAGER MuMuManager.exe 路径（phone_start_emulator 用；默认 MuMu 12 常见路径）
+//   PHONE_MUMU_INSTANCE MuMu 实例编号（默认 0）
 //   PHONE_SHOT_DIR    截图输出目录（默认 系统临时目录/phone-mcp-shots）
 //   PHONE_MACRO_FILE  宏存储文件（默认 用户目录/.phone-mcp/macros.json）
 //   PHONE_FFMPEG      ffmpeg 路径（默认自动探测，仅 video_frames 需要）
@@ -50,6 +52,13 @@ const ADB = findAdb();
 const SHOT_DIR = process.env.PHONE_SHOT_DIR || path.join(os.tmpdir(), 'phone-mcp-shots');
 // 默认设备：留空 = 自动选第一个已连接设备（可用 PHONE_SERIAL 固定到某一台）
 let SERIAL = process.env.PHONE_SERIAL || '';
+
+// MuMu 模拟器：默认不随任何东西自启，只在 phone_start_emulator 被调用时拉起
+const MUMU_MANAGER =
+  process.env.PHONE_MUMU_MANAGER ||
+  (process.platform === 'win32' ? 'D:\\Program Files\\Netease\\MuMu\\nx_main\\MuMuManager.exe' : '');
+const MUMU_INSTANCE = process.env.PHONE_MUMU_INSTANCE || '0';
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function adb(args, { timeout = 30000, serial = true } = {}) {
   const full = serial && SERIAL ? ['-s', SERIAL, ...args] : args;
@@ -588,6 +597,50 @@ server.tool('phone_status', '查看 adb 是否可用、当前连接了哪些设�
       `已选中: ${SERIAL || '（未选，将用第一台）'}`
   );
 });
+
+server.tool(
+  'phone_start_emulator',
+  '启动 MuMu 模拟器并等 adb 连上（一般 30~90 秒）。主人让你「打开模拟器 / 开一下模拟器」而模拟器没开时用它；已经开着会直接返回。',
+  {
+    instance: z.number().optional().describe('MuMu 实例编号，默认取 PHONE_MUMU_INSTANCE 或 0'),
+    waitSec: z.number().optional().describe('等 adb 出现的秒数，默认 90'),
+  },
+  async ({ instance, waitSec }) => {
+    const target = SERIAL || '127.0.0.1:16384';
+    const upOn = (out) =>
+      String(out || '')
+        .split(/\r?\n/)
+        .some((l) => l.trim().split(/\s+/)[0] === target && /\sdevice\b/.test(l));
+    const dev0 = await adb(['devices'], { serial: false });
+    if (upOn(dev0.out)) return text(`模拟器已经在跑，adb 已连上：${target} ✓`);
+
+    if (!MUMU_MANAGER || !fs.existsSync(MUMU_MANAGER)) {
+      return fail(`找不到 MuMuManager：${MUMU_MANAGER || '（未配置）'}。让主人手动打开模拟器，或设置 PHONE_MUMU_MANAGER。`);
+    }
+    const idx = String(instance ?? MUMU_INSTANCE);
+    log('starting emulator', MUMU_MANAGER, 'instance', idx);
+    try {
+      await execFileAsync(MUMU_MANAGER, ['control', '-v', idx, 'launch'], { timeout: 120000, windowsHide: true });
+    } catch (e) {
+      return fail('MuMu 启动命令失败：' + String(e?.stderr || e?.message || e).slice(0, 300));
+    }
+
+    const wait = (waitSec ?? 90) * 1000;
+    const deadline = Date.now() + wait;
+    while (Date.now() < deadline) {
+      await adb(['connect', target], { timeout: 15000, serial: false });
+      const d = await adb(['devices'], { serial: false });
+      if (upOn(d.out)) {
+        SERIAL = target;
+        return text(`模拟器已启动并连上 adb：${target} ✓\n现在可以用 phone_screenshot / phone_dump / phone_open_app 了。`);
+      }
+      await sleepMs(3000);
+    }
+    return fail(
+      `已发出启动命令，但 ${Math.round(wait / 1000)} 秒内 adb 还没出现。MuMu 可能还在开机，稍后调 phone_status 再看，或请主人确认模拟器窗口。`
+    );
+  }
+);
 
 server.tool(
   'phone_pair',

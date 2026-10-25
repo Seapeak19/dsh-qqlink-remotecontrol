@@ -21,5 +21,12 @@
   },
   "bili": {
     "enabled": false
+  },
+  "memory": {
+    "auto": false,
+    "everyMin": 15,
+    "minNewMessages": 6,
+    "quietSec": 90,
+    "maxEntriesPerRun": 6
   }
 }

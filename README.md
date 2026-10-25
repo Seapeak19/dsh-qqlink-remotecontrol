@@ -7,12 +7,13 @@
 ## 功能
 
 - **QQ 陪伴**：SnowLuma（OneBot v11）↔ `qq-bridge` ↔ DeepSeek Harness agent；支持私聊/群聊、引用、表情、表情包、等待/唤醒、长期记忆。
-- **安卓模拟器**：MuMu + adb；截图、点按、滑动、输入中文、打开 App、连招。
+- **安卓模拟器**：MuMu + adb；截图、点按、滑动、输入中文、打开 App、连招（默认不随控制台自启，按需启动）。
 - **桌面软件**：白名单授权后，启动/截图/点击/输入/按键/滚轮。
 - **文件/文档**：Word、Excel、PDF、文本的读取/修改/拆分合并/加批注；QQ 发文件。
 - **持续感知**：定时抓屏 + 系统回环录音 + Windows 自带 zh-CN 离线语音转文字，用于看视频/直播。
-- **本地控制台**：总览、设置、人格、记忆、日志、软件、文件；浅蓝极简主题。
+- **本地控制台**：总览、设置、人格、记忆、日志、软件、文件；浅蓝极简主题。总览只留四张状态卡，不堆活动流水。
 - **长期记忆**：事实/偏好/反馈/承诺/关系/事件，摘要自动注入人格。
+- **自动记忆**：有新聊天且安静下来后，控制台自动调模型提炼长期记忆（可在「记忆」页暂停/立即提炼）。
 
 ## 架构
 
@@ -106,6 +107,8 @@ start-all.bat
 | `qqbridge.dir` | qq-bridge 目录，默认 `qq-bridge`（相对仓库根） |
 | `mumu.manager` / `mumu.adb` | MuMu 管理器和 adb 路径（可选） |
 | `mumu.serial` | adb 序列号，默认 `127.0.0.1:16384` |
+| `mumu.autoStart` | 「启动全部」时是否顺带拉起模拟器；默认 `false`（需要时手动开或让她调 `phone_start_emulator`） |
+| `memory.auto` | 自动记忆开关，默认 `false`；`everyMin` / `minNewMessages` / `quietSec` / `maxEntriesPerRun` 控制节奏 |
 | `autoStart` | 控制台启动时是否自动拉起外部程序；公共版默认 `false` |
 
 `qq-bridge/config.json`：

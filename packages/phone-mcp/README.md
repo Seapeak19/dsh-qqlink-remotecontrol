@@ -103,13 +103,14 @@ MCP 客户端配置（以通用 stdio 形式为例）：
 
 ---
 
-## 34 个工具
+## 35 个工具
 
-### 📱 设备与连接（4）
+### 📱 设备与连接（5）
 
 | 工具 | 作用 |
 |---|---|
 | `phone_status` | adb 是否可用、认到了哪些设备 |
+| `phone_start_emulator` | **启动 MuMu 模拟器并等 adb 连上**（默认不自启，需要时调它） |
 | `phone_pair` | 首次无线配对（填 IP / 端口 / 6 位配对码） |
 | `phone_connect` | 连接到 `ip:端口` |
 | `phone_devices` | 列出所有设备，并可切换当前使用的那台 |
@@ -218,6 +219,8 @@ MCP 客户端配置（以通用 stdio 形式为例）：
 |---|---|---|
 | `PHONE_ADB` | 自动探测 | adb 可执行文件路径 |
 | `PHONE_SERIAL` | 自动选第一台 | 设备序列号，例如 `192.168.1.98:5555` 或 `emulator-5554` |
+| `PHONE_MUMU_MANAGER` | MuMu 12 默认路径 | `MuMuManager.exe` 路径（只有 `phone_start_emulator` 需要） |
+| `PHONE_MUMU_INSTANCE` | `0` | MuMu 实例编号 |
 | `PHONE_SHOT_DIR` | 系统临时目录 | 截图输出目录 |
 | `PHONE_MACRO_FILE` | `~/.phone-mcp/macros.json` | 宏存储文件 |
 | `PHONE_FFMPEG` | `ffmpeg` | ffmpeg 路径（只有 `video_frames` 需要） |
